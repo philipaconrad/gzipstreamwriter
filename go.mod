@@ -1,3 +1,5 @@
 module github.com/philipaconrad/gzipstreamwriter
 
-go 1.22.5
+go 1.21
+
+toolchain go1.23.0

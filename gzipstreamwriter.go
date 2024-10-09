@@ -1,3 +1,7 @@
+// Copyright 2024, Philip Conrad.  All rights reserved.
+// Use of this source code is governed by an Apache2
+// license that can be found in the LICENSE file.
+
 package gzipstreamwriter
 
 import "io"
