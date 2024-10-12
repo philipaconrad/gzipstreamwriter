@@ -56,7 +56,7 @@ func TestWrite(t *testing.T) {
 			expGzipWriter.Reset(&expBuffer)
 
 			// TODO: Replace with the real GzipStreamWriter.
-			actGzipWriter := gzip.NewWriter(&actBuffer)
+			actGzipWriter := NewGzipStreamWriter(&actBuffer)
 
 			// Write input through both writers, check for errors.
 			expWroteBytes, expErr := expGzipWriter.Write(tc.input)
