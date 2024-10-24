@@ -32,6 +32,8 @@ const (
 	HuffmanOnly        = flate.HuffmanOnly
 )
 
+var ErrBlob = errors.New("gzip: invalid gzip blob")
+
 type CompressedBlobWriter interface {
 	WriteCompressed(p []byte) (n int, err error)
 }
@@ -290,12 +292,46 @@ func (z *GzipStreamWriter) Write(p []byte) (int, error) {
 // func (z *GzipStreamWriter) WriteRune(c rune) error
 // func (z *GzipStreamWriter) WriteString(s string) (n int, err error)
 
-// // Writes a compressed gzip byte blob through to the underlying writer.
-// func (z *GzipStreamWriter) WriteCompressed(p []byte) (n int, err error) {
-// 	z.length += uint32(len(p))
-// 	z.digest = crc32.Update(z.digest, crc32.IEEETable, p)
-// 	n, z.err = z.compressor.Write(p)
-// }
+// Writes a compressed gzip byte blob through to the underlying writer.
+func (z *GzipStreamWriter) WriteCompressed(p []byte) (int, error) {
+	if z.err != nil {
+		return 0, z.err
+	}
+
+	var n int
+	if n, z.err = z.writeHeader(); z.err != nil {
+		return n, z.err
+	}
+
+	// Not a compliant Gzip blob. We can reject this up front.
+	// This assumes header: 10 bytes, trailer: 8 bytes.
+	if len(p) < 18 {
+		return n, ErrBlob
+	}
+	trailerChecksum := binary.LittleEndian.Uint32(p[(len(p) - 8):(len(p) - 4)])
+	trailerLength := binary.LittleEndian.Uint32(p[(len(p) - 4):])
+	content := getDeflateSlice(p) // TODO: Implement the content slice-out function.
+
+	z.size += trailerLength // uint32(len(p))
+
+	z.digest = crc32Combine(z.digest, trailerChecksum, int(trailerLength))
+	n, z.err = z.w.Write(content)
+	// We would flush if we could here, but z.w is an io.Writer, and those do
+	// not have to implement Flush().
+	return n, z.err
+}
+
+func crc32Combine(front, back uint32, length int) uint32 {
+	var zeroes [64]byte
+	if length > 64 {
+		for length > 64 {
+			crc32.Update(front, crc32.IEEETable, zeroes[:])
+			length -= 64
+		}
+	}
+
+	return crc32.Update(front, crc32.IEEETable, zeroes[0:length]) ^ back
+}
 
 // Close closes the [Writer] by flushing any unwritten data to the underlying
 // [io.Writer] and writing the GZIP footer.
