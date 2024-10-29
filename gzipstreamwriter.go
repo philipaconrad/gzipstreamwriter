@@ -5,6 +5,7 @@
 package gzipstreamwriter
 
 import (
+	"bytes"
 	"compress/flate"
 	"compress/gzip"
 	"encoding/binary"
@@ -151,18 +152,12 @@ func (z *GzipStreamWriter) setClosed(value bool) {
 
 func (z *GzipStreamWriter) checkWroteHeader() bool {
 	flag := z.stateFlags & 0x1
-	if flag == 1 {
-		return true
-	}
-	return false
+	return flag == 1
 }
 
 func (z *GzipStreamWriter) checkClosed() bool {
 	flag := (z.stateFlags & 0x2) >> 1
-	if flag == 1 {
-		return true
-	}
-	return false
+	return flag == 1
 }
 
 func (z *GzipStreamWriter) writeHeader() (int, error) {
@@ -310,7 +305,10 @@ func (z *GzipStreamWriter) WriteCompressed(p []byte) (int, error) {
 	}
 	trailerChecksum := binary.LittleEndian.Uint32(p[(len(p) - 8):(len(p) - 4)])
 	trailerLength := binary.LittleEndian.Uint32(p[(len(p) - 4):])
-	content := getDeflateSlice(p) // TODO: Implement the content slice-out function.
+	content, ok := getDeflateSlice(p) // TODO: Implement the content slice-out function.
+	if !ok {
+		return n, ErrBlob
+	}
 
 	z.size += trailerLength // uint32(len(p))
 
@@ -322,15 +320,95 @@ func (z *GzipStreamWriter) WriteCompressed(p []byte) (int, error) {
 }
 
 func crc32Combine(front, back uint32, length int) uint32 {
-	var zeroes [64]byte
-	if length > 64 {
-		for length > 64 {
-			crc32.Update(front, crc32.IEEETable, zeroes[:])
-			length -= 64
+	// var zeroes [64]byte
+	// if length > 64 {
+	// 	for length > 64 {
+	// 		crc32.Update(front, crc32.IEEETable, zeroes[:])
+	// 		length -= 64
+	// 	}
+	// }
+	zeroes := make([]byte, length) // HACK: Naive version.
+	return crc32.Update(front, crc32.IEEETable, zeroes[0:length]) ^ back
+}
+
+// Returns: updated slice + ok status.
+// Returns false when not a valid gzip header.
+func getDeflateSlice(gzblob []byte) ([]byte, bool) {
+	headerLength := getHeaderLength(gzblob)
+	if headerLength < 0 {
+		return nil, false
+	}
+
+	// Safety.
+	if len(gzblob) < (headerLength + 8) {
+		return nil, false
+	}
+
+	return gzblob[headerLength:(len(gzblob) - 8)], true
+}
+
+// Walks the state machine for determining header length, without messing around with setting state.
+// Returns a negative value on error? (Could do a boolean just as easily.)
+func getHeaderLength(gzBlob []byte) int {
+	headerLen := 10
+	if len(gzBlob) < headerLen {
+		return -1
+	}
+
+	// Valid header start bytes check.
+	if gzBlob[0] != gzipID1 || gzBlob[1] != gzipID2 || gzBlob[2] != gzipDeflate {
+		return -1
+	}
+
+	flag := gzBlob[3]
+	// Scan over the "Extra" field, which is length-prefixed.
+	if flag&flagExtra != 0 {
+		// Safety
+		headerLen += 2
+		if len(gzBlob) < headerLen {
+			return -1
+		}
+		extraFieldLength := binary.LittleEndian.Uint16(gzBlob[10:12])
+		// Safety
+		headerLen += int(extraFieldLength)
+		if len(gzBlob) < headerLen {
+			return -1
+		}
+	}
+	// Scan over Name and Comment fields, which are zero-terminated.
+	if flag&flagName != 0 {
+		endField := bytes.IndexByte(gzBlob[headerLen:], byte(0))
+		if endField < 0 {
+			return -1 // Safety
+		}
+		// Safety
+		headerLen += endField
+		if len(gzBlob) < headerLen {
+			return -1
+		}
+	}
+	if flag&flagComment != 0 {
+		endField := bytes.IndexByte(gzBlob[headerLen:], byte(0))
+		if endField < 0 {
+			return -1 // Safety
+		}
+		// Safety
+		headerLen += endField
+		if len(gzBlob) < headerLen {
+			return -1
 		}
 	}
 
-	return crc32.Update(front, crc32.IEEETable, zeroes[0:length]) ^ back
+	// Scan over the Header CRC field.
+	if flag&flagHdrCrc != 0 {
+		// Safety
+		headerLen += 2
+		if len(gzBlob) < headerLen {
+			return -1
+		}
+	}
+
+	return headerLen
 }
 
 // Close closes the [Writer] by flushing any unwritten data to the underlying
