@@ -319,16 +319,14 @@ func (z *GzipStreamWriter) WriteCompressed(p []byte) (int, error) {
 	return n, z.err
 }
 
+// Combine 2x CRC32 checksums into a single checksum, using the XOR method.
 func crc32Combine(front, back uint32, length int) uint32 {
-	// var zeroes [64]byte
-	// if length > 64 {
-	// 	for length > 64 {
-	// 		crc32.Update(front, crc32.IEEETable, zeroes[:])
-	// 		length -= 64
-	// 	}
-	// }
 	zeroes := make([]byte, length) // HACK: Naive version.
-	return crc32.Update(front, crc32.IEEETable, zeroes[0:length]) ^ back
+	// This is magic, but based on what I've been able to discern, it looks like
+	// you have to do some extra XORs to get the "front" into a form that can be
+	// XOR'd with the "back" checksum.
+	front = crc32.Update(0xffffffff^front, crc32.IEEETable, zeroes) ^ 0xffffffff
+	return front ^ back // crc32.Update(front, crc32.IEEETable, zeroes) ^ back
 }
 
 // Returns: updated slice + ok status.
