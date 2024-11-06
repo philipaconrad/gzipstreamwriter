@@ -96,6 +96,10 @@ type CompressedBlobWriter interface {
 // func (g *GzipBlobStream) Close() error {
 // }
 
+// The stateFlags bitfield tracks
+// 0: Have we written the Gzip header yet?
+// 1: Has the stream been closed yet?
+// 2: Are we writing into the DEFLATE stream currently? (Negated when we write compressed blobs.)
 type GzipStreamWriter struct {
 	gzip.Header // written at first call to Write, Flush, or Close
 	w           io.Writer
@@ -104,7 +108,7 @@ type GzipStreamWriter struct {
 	err         error
 	digest      uint32
 	size        uint32
-	stateFlags  uint32 // 0x0: wroteHeader, 0x1: closed
+	stateFlags  uint32 // 0x1: wroteHeader, 0x2: closed, 0x4: activeDeflateStream
 }
 
 func NewGzipStreamWriter(w io.Writer) *GzipStreamWriter {
@@ -150,6 +154,14 @@ func (z *GzipStreamWriter) setClosed(value bool) {
 	z.stateFlags = (z.stateFlags & ^uint32(0x0002)) | (flag << 1)
 }
 
+func (z *GzipStreamWriter) setActiveDeflateStream(value bool) {
+	flag := uint32(0)
+	if value {
+		flag = 1
+	}
+	z.stateFlags = (z.stateFlags & ^uint32(0x0004)) | (flag << 2)
+}
+
 func (z *GzipStreamWriter) checkWroteHeader() bool {
 	flag := z.stateFlags & 0x1
 	return flag == 1
@@ -157,6 +169,11 @@ func (z *GzipStreamWriter) checkWroteHeader() bool {
 
 func (z *GzipStreamWriter) checkClosed() bool {
 	flag := (z.stateFlags & 0x2) >> 1
+	return flag == 1
+}
+
+func (z *GzipStreamWriter) checkActiveDeflateStream() bool {
+	flag := (z.stateFlags & 0x4) >> 2
 	return flag == 1
 }
 
@@ -275,10 +292,12 @@ func (z *GzipStreamWriter) Write(p []byte) (int, error) {
 	z.size += uint32(len(p))
 	z.digest = crc32.Update(z.digest, crc32.IEEETable, p)
 
+	z.setActiveDeflateStream(true)
 	if n, z.err = z.compressor.Write(p); z.err != nil {
 		return n, z.err
 	}
-	z.err = z.compressor.Flush()
+	// Note: No forced flush here, we flush lazily instead.
+	// z.err = z.compressor.Flush()
 	return n, z.err
 }
 
@@ -298,6 +317,14 @@ func (z *GzipStreamWriter) WriteCompressed(p []byte) (int, error) {
 		return n, z.err
 	}
 
+	// Flush the current deflate stream, if one was active.
+	if z.checkActiveDeflateStream() {
+		if z.err = z.compressor.Flush(); z.err != nil {
+			return n, z.err
+		}
+		z.setActiveDeflateStream(false)
+	}
+
 	// Not a compliant Gzip blob. We can reject this up front.
 	// This assumes header: 10 bytes, trailer: 8 bytes.
 	if len(p) < 18 {
@@ -305,7 +332,7 @@ func (z *GzipStreamWriter) WriteCompressed(p []byte) (int, error) {
 	}
 	trailerChecksum := binary.LittleEndian.Uint32(p[(len(p) - 8):(len(p) - 4)])
 	trailerLength := binary.LittleEndian.Uint32(p[(len(p) - 4):])
-	content, ok := getDeflateSlice(p) // TODO: Implement the content slice-out function.
+	content, ok := getDeflateSlice(p)
 	if !ok {
 		return n, ErrBlob
 	}
@@ -314,6 +341,7 @@ func (z *GzipStreamWriter) WriteCompressed(p []byte) (int, error) {
 
 	z.digest = crc32Combine(z.digest, trailerChecksum, int(trailerLength))
 	n, z.err = z.w.Write(content)
+
 	// We would flush if we could here, but z.w is an io.Writer, and those do
 	// not have to implement Flush().
 	return n, z.err
