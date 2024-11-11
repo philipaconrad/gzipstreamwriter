@@ -10,6 +10,7 @@ import (
 	"compress/gzip"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"hash/crc32"
 	"io"
 )
@@ -33,26 +34,35 @@ const (
 	HuffmanOnly        = flate.HuffmanOnly
 )
 
-var ErrBlob = errors.New("gzip: invalid gzip blob")
+var (
+	ErrBlob                = errors.New("gzip: invalid gzip blob")
+	ErrHdrNonLatin1        = errors.New("gzip: non-Latin-1 header string")
+	ErrHdrExtaDataTooLarge = errors.New("gzip: extra data is too large")
+)
 
 type CompressedBlobWriter interface {
 	WriteCompressed(p []byte) (n int, err error)
 }
 
 // Design Goals:
-// - Allow writing either raw bytes or compressed gzip blobs to a destination, resulting in a valid, concatenated gzip blob at the destination, as if the blob had been written "all at once" as a single gzip byte stream.
+// - Allow writing either raw bytes or compressed gzip blobs to a destination, resulting
+//   in a valid, concatenated gzip blob at the destination, as if the blob had been written
+//   "all at once" as a single gzip byte stream.
 // - Avoid decompressing the compressed blobs.
 // - Avoid excessive memory and CPU burn if possible.
-// - Avoid exposing the awful complex parts to happy-path users. Still provide some support scaffolding for hard-mode folks.
+// - Avoid exposing the awful complex parts to happy-path users. Still provide some support
+//   scaffolding for hard-mode folks.
 
 // Design Anti-Goals:
-// - Best possible compression performance: We know that some usage patterns can result in a less-than-optimal overall compression ratio.
+// - Best possible compression performance: We know that some usage patterns can result in a
+//   less-than-optimal overall compression ratio.
 // -
 
 // - When it's time to ship off events for upload:
 //   - We construct a chunk from a subslice of the event blobs
 //   - Chop off the header/trailer from each blob. Save the header from the first one.
-//   - Update each CRC32 from the trailer appropriately for its byte position, and save the updated CRC32's in a slice.
+//   - Update each CRC32 from the trailer appropriately for its byte position, and save the
+//     updated CRC32's in a slice.
 //     - XOR the slice CRC32's together for the final CRC32.
 //   - Write header to the byte stream.
 //   - Write each blob to the byte stream.
@@ -60,7 +70,8 @@ type CompressedBlobWriter interface {
 //   - We then return each []byte and gzip.Writer to the pool for later reuse.
 //
 // - The blob writer takes a list of gzip compressed blobs, and writes to an io.WriteCloser?
-//   - This allows writing a "snapshot" of blobs, with minimal effort. The queue management is separate then.
+//   - This allows writing a "snapshot" of blobs, with minimal effort. The queue management is
+//     separate then.
 
 // GzipBlobStream efficiently concatenates gzipped blobs together, and ensures a correct header/trailer is written to the output.
 // Note: All blobs need to follow the same compressor settings, and need to include their own header/trailers.
@@ -195,11 +206,12 @@ func (z *GzipStreamWriter) writeHeader() (int, error) {
 		buf[3] |= 0x10
 	}
 	binary.LittleEndian.PutUint32(buf[4:8], uint32(z.ModTime.Unix()))
-	if z.level == BestCompression {
+	switch z.level {
+	case BestCompression:
 		buf[8] = 2
-	} else if z.level == BestSpeed {
+	case BestSpeed:
 		buf[8] = 4
-	} else {
+	default:
 		buf[8] = 0
 	}
 	buf[9] = z.OS
@@ -235,26 +247,27 @@ func (z *GzipStreamWriter) writeHeader() (int, error) {
 // writeHeaderBytes writes a length-prefixed byte slice to z.w.
 func (z *GzipStreamWriter) writeHeaderBytes(b []byte) error {
 	if len(b) > 0xffff {
-		return errors.New("gzip.Write: Extra data is too large")
+		return ErrHdrExtaDataTooLarge
 	}
 	var lengthPrefix [2]byte
 	binary.LittleEndian.PutUint16(b[:2], uint16(len(b)))
 	_, err := z.w.Write(lengthPrefix[:2])
 	if err != nil {
-		return err
+		return fmt.Errorf("gzip: failed to write length prefix: %w", err)
 	}
 	_, err = z.w.Write(b)
-	return err
+	return fmt.Errorf("gzip: failed to write bytes: %w", err)
 }
 
 // writeHeaderString writes a UTF-8 string s in GZIP's format to z.w.
 // GZIP (RFC 1952) specifies that strings are NUL-terminated ISO 8859-1 (Latin-1).
-func (z *GzipStreamWriter) writeHeaderString(s string) (err error) {
+func (z *GzipStreamWriter) writeHeaderString(s string) error {
+	var err error
 	// GZIP stores Latin-1 strings; error if non-Latin-1; convert if non-ASCII.
 	needconv := false
 	for _, v := range s {
 		if v == 0 || v > 0xff {
-			return errors.New("gzip.Write: non-Latin-1 header string")
+			return ErrHdrNonLatin1
 		}
 		if v > 0x7f {
 			needconv = true
@@ -270,11 +283,11 @@ func (z *GzipStreamWriter) writeHeaderString(s string) (err error) {
 		_, err = io.WriteString(z.w, s)
 	}
 	if err != nil {
-		return err
+		return fmt.Errorf("gzip: failed to write header string: %w", err)
 	}
 	// GZIP strings are NUL-terminated.
 	_, err = z.w.Write([]byte{0})
-	return err
+	return fmt.Errorf("gzip: failed to write null terminator for header string: %w", err)
 }
 
 // Writes the byte slice to the Gzip output stream.
@@ -451,7 +464,7 @@ func (z *GzipStreamWriter) Close() error {
 	z.setClosed(true)
 
 	if !z.checkWroteHeader() {
-		z.Write(nil)
+		_, _ = z.Write(nil)
 		if z.err != nil {
 			return z.err
 		}

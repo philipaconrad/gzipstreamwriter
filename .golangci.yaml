@@ -1,0 +1,139 @@
+---
+run:
+  timeout: 5m
+
+linters:
+  disable-all: true
+  # enable:
+  #   - mirror
+  #   - errcheck
+  #   - govet
+  #   - ineffassign
+  #   - revive # replacement for golint
+  #   - gofmt
+  #   - goimports
+  #   - unused
+  #   - misspell
+  #   - tenv
+  #   - typecheck
+  #   - staticcheck
+  #   - gosimple
+  #   - prealloc
+  #   - unconvert
+  #   # - gosec # too many false positives
+  #   - paralleltest
+  enable:
+    - asasalint
+    - asciicheck
+    - bidichk
+    - bodyclose
+    - canonicalheader
+    - containedctx
+    - contextcheck
+    - copyloopvar
+    # - cyclop # Fires on things where we need the cyclomatic complexity.
+    - decorder
+    - depguard
+    - dogsled
+    - dupl
+    - dupword
+    - durationcheck
+    - err113
+    - errcheck
+    - errchkjson
+    - errname
+    - errorlint
+    - exhaustive
+    #- exhaustruct # Too many false positives.
+    - fatcontext
+    - forbidigo
+    - forcetypeassert
+    - gci
+    - ginkgolinter
+    - gocheckcompilerdirectives
+    #- gochecknoglobals
+    - gochecknoinits
+    - gochecksumtype
+    - gocognit
+    - goconst
+    - gocritic
+    - gocyclo
+    #- godot # This is just silly.
+    #- godox # Fires too often on things that will eventually be fixed.
+    - gofmt
+    - gofumpt
+    - goheader
+    - goimports
+    - gomoddirectives
+    - gomodguard
+    - goprintffuncname
+    #- gosec # Too many false positives, where truncation is desired.
+    - gosimple
+    - gosmopolitan
+    - govet
+    - grouper
+    - importas
+    - inamedparam
+    - ineffassign
+    - interfacebloat
+    - intrange
+    - ireturn
+    - lll
+    - loggercheck
+    - maintidx
+    - makezero
+    - mirror
+    - misspell
+    - musttag
+    - nakedret
+    - nestif
+    - nilerr
+    - nilnil
+    #- nlreturn
+    - noctx
+    - nolintlint
+    - nonamedreturns
+    - nosprintfhostport
+    - paralleltest
+    - perfsprint
+    - prealloc
+    - predeclared
+    - promlinter
+    - protogetter
+    - reassign
+    - revive
+    - rowserrcheck
+    - sloglint
+    - spancheck
+    - sqlclosecheck
+    - staticcheck
+    - stylecheck
+    - tagalign
+    - tagliatelle
+    - tenv
+    - testableexamples
+    - testifylint
+    - testpackage
+    - thelper
+    - tparallel
+    - unconvert
+    - unparam
+    - unused
+    - usestdlibvars
+    - wastedassign
+    - whitespace
+    - wrapcheck
+    - zerologlint
+    # - gosec # too many false positives
+
+linters-settings:
+  lll:
+    line-length: 200
+  misspell:
+    locale: US
+
+issues:
+  exclude-rules:
+    - path: '(.+)_test\.go'
+      linters:
+        - wrapcheck
