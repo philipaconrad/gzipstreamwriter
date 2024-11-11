@@ -100,12 +100,6 @@ func TestWrite(t *testing.T) {
 	}
 }
 
-func TestStringWrite(t *testing.T) {
-	// TODO
-	t.Parallel()
-	t.Skip("not implemented")
-}
-
 // ---------------------------------------------------------------------------
 // Helper functions
 // ---------------------------------------------------------------------------

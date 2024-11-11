@@ -298,8 +298,10 @@ func (z *GzipStreamWriter) Write(p []byte) (int, error) {
 	}
 
 	var n int
-	if n, z.err = z.writeHeader(); z.err != nil {
-		return n, z.err
+	if !z.checkWroteHeader() {
+		if n, z.err = z.writeHeader(); z.err != nil {
+			return n, z.err
+		}
 	}
 
 	z.size += uint32(len(p))
@@ -313,11 +315,6 @@ func (z *GzipStreamWriter) Write(p []byte) (int, error) {
 	// z.err = z.compressor.Flush()
 	return n, z.err
 }
-
-// func (z *GzipStreamWriter) WriteTo(w io.Writer) (n int64, err error)
-// func (z *GzipStreamWriter) WriteByte(c byte) error
-// func (z *GzipStreamWriter) WriteRune(c rune) error
-// func (z *GzipStreamWriter) WriteString(s string) (n int, err error)
 
 // Writes a compressed gzip byte blob through to the underlying writer.
 func (z *GzipStreamWriter) WriteCompressed(p []byte) (int, error) {
@@ -450,6 +447,8 @@ func getHeaderLength(gzBlob []byte) int {
 	return headerLen
 }
 
+// func (z *GzipStreamWriter) WriteTo(w io.Writer) (n int64, err error)
+
 // Close closes the [Writer] by flushing any unwritten data to the underlying
 // [io.Writer] and writing the GZIP footer.
 // It does not close the underlying [io.Writer].
@@ -514,13 +513,11 @@ func (z *GzipStreamWriter) Reset(w io.Writer) {
 // Assertions for checking that we implemented the interfaces.
 // The compiler will optimize all of these away.
 var (
-	_ io.Writer = (*GzipStreamWriter)(nil)
-	// _ io.WriterTo = (*GzipStreamWriter)(nil)
-	// _ io.ByteWriter        = (*GzipStreamWriter)(nil)
-	// _ io.StringWriter      = (*GzipStreamWriter)(nil)
-	// _ CompressedBlobWriter = (*GzipStreamWriter)(nil)
+	_ io.Writer      = (*GzipStreamWriter)(nil)
 	_ io.Closer      = (*GzipStreamWriter)(nil)
 	_ io.WriteCloser = (*GzipStreamWriter)(nil)
+	// _ io.WriterTo = (*GzipStreamWriter)(nil)
+	_ CompressedBlobWriter = (*GzipStreamWriter)(nil)
 )
 
 // Everything from here down is inherited from the source:
