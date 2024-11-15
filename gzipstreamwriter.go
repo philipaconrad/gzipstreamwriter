@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
+	"time"
 )
 
 const (
@@ -128,6 +129,9 @@ func NewGzipStreamWriter(w io.Writer) *GzipStreamWriter {
 }
 
 func NewGzipStreamWriterLevel(w io.Writer, level int) (*GzipStreamWriter, error) {
+	if level < HuffmanOnly || level > BestCompression {
+		return nil, fmt.Errorf("gzip: invalid compression level: %d", level)
+	}
 	z := new(GzipStreamWriter)
 	z.init(w, level)
 	return z, nil
@@ -190,6 +194,7 @@ func (z *GzipStreamWriter) checkActiveDeflateStream() bool {
 
 func (z *GzipStreamWriter) writeHeader() (int, error) {
 	// Write the GZIP header lazily.
+	var n int
 	z.setWroteHeader(true)
 	buf := [10]byte{}
 	buf[0] = gzipID1
@@ -205,7 +210,16 @@ func (z *GzipStreamWriter) writeHeader() (int, error) {
 	if z.Comment != "" {
 		buf[3] |= 0x10
 	}
-	binary.LittleEndian.PutUint32(buf[4:8], uint32(z.ModTime.Unix()))
+	// Note: Some libraries like github.com/klauspost/compress/gzip choose to
+	// always write this field, which causes slight differences in header bytes
+	// versus the stdlib gzip implementation.
+	// Since this is a one-time cost for each GZIP stream, we go with the
+	// stdlib approach for sake of compatibility.
+	if z.ModTime.After(time.Unix(0, 0)) {
+		// Section 2.3.1, the zero value for MTIME means that the
+		// modified time is not set.
+		binary.LittleEndian.PutUint32(buf[4:8], uint32(z.ModTime.Unix()))
+	}
 	switch z.level {
 	case BestCompression:
 		buf[8] = 2
@@ -215,7 +229,6 @@ func (z *GzipStreamWriter) writeHeader() (int, error) {
 		buf[8] = 0
 	}
 	buf[9] = z.OS
-	var n int
 	n, z.err = z.w.Write(buf[:10])
 	if z.err != nil {
 		return n, z.err
@@ -250,13 +263,14 @@ func (z *GzipStreamWriter) writeHeaderBytes(b []byte) error {
 		return ErrHdrExtaDataTooLarge
 	}
 	var lengthPrefix [2]byte
-	binary.LittleEndian.PutUint16(b[:2], uint16(len(b)))
-	_, err := z.w.Write(lengthPrefix[:2])
-	if err != nil {
+	binary.LittleEndian.PutUint16(lengthPrefix[:2], uint16(len(b)))
+	if _, err := z.w.Write(lengthPrefix[:2]); err != nil {
 		return fmt.Errorf("gzip: failed to write length prefix: %w", err)
 	}
-	_, err = z.w.Write(b)
-	return fmt.Errorf("gzip: failed to write bytes: %w", err)
+	if _, err := z.w.Write(b); err != nil {
+		return fmt.Errorf("gzip: failed to write bytes: %w", err)
+	}
+	return nil
 }
 
 // writeHeaderString writes a UTF-8 string s in GZIP's format to z.w.
@@ -287,7 +301,10 @@ func (z *GzipStreamWriter) writeHeaderString(s string) error {
 	}
 	// GZIP strings are NUL-terminated.
 	_, err = z.w.Write([]byte{0})
-	return fmt.Errorf("gzip: failed to write null terminator for header string: %w", err)
+	if err != nil {
+		return fmt.Errorf("gzip: failed to write null terminator for header string: %w", err)
+	}
+	return err
 }
 
 // Writes the byte slice to the Gzip output stream.
@@ -503,11 +520,15 @@ func (z *GzipStreamWriter) Flush() error {
 		}
 	}
 	z.err = z.compressor.Flush()
+	z.setActiveDeflateStream(false)
 	return z.err
 }
 
 func (z *GzipStreamWriter) Reset(w io.Writer) {
 	z.init(w, z.level)
+	z.setClosed(false)
+	z.setWroteHeader(false)
+	z.setActiveDeflateStream(false)
 }
 
 // Assertions for checking that we implemented the interfaces.

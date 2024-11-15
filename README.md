@@ -31,3 +31,8 @@ For uncompressed `[]byte` writes:
 
 This gives us a powerful abstraction that "does the right thing" behind the scenes, while being ridiculously cheaper to compute than decompressing and recompressing compressed gzip data.
 
+## Go Version Support
+
+I'm supporting the latest Go major version - 2, which seems to be the policy several other large projects are following.
+As this library was originally built for use in one of those bigger projects, I've adopted an appropriate support policy to ensure it's compatible.
+

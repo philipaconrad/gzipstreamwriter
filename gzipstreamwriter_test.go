@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/philipaconrad/gzipstreamwriter"
 )
 
@@ -24,6 +25,128 @@ var testGzipReaderPool = sync.Pool{
 		reader := new(gzip.Reader)
 		return reader
 	},
+}
+
+func TestClose(t *testing.T) {
+	t.Parallel()
+
+	t.Run("closing writer is same as stdlib", func(t *testing.T) {
+		t.Parallel()
+
+		expBuffer := bytes.Buffer{}
+		actBuffer := bytes.Buffer{}
+
+		expGzipWriter, ok := testGzipWriterPool.Get().(*gzip.Writer)
+		if !ok {
+			t.Fatal("Could not get *gzip.Writer instance from the pool.")
+		}
+		defer expGzipWriter.Close()
+		defer testGzipWriterPool.Put(expGzipWriter)
+		expGzipWriter.Reset(&expBuffer)
+		expGzipWriter.Close()
+
+		actGzipWriter := gzipstreamwriter.NewGzipStreamWriter(&actBuffer)
+		if err := actGzipWriter.Close(); err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+
+		if diff := cmp.Diff(expBuffer.Bytes(), actBuffer.Bytes()); diff != "" {
+			t.Fatalf("TestClose() single-close mismatch (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("double-close is same as stdlib", func(t *testing.T) {
+		t.Parallel()
+
+		expBuffer := bytes.Buffer{}
+		actBuffer := bytes.Buffer{}
+
+		expGzipWriter, ok := testGzipWriterPool.Get().(*gzip.Writer)
+		if !ok {
+			t.Fatal("Could not get *gzip.Writer instance from the pool.")
+		}
+		defer expGzipWriter.Close()
+		defer testGzipWriterPool.Put(expGzipWriter)
+		expGzipWriter.Reset(&expBuffer)
+		expGzipWriter.Close()
+		expGzipWriter.Close()
+
+		actGzipWriter := gzipstreamwriter.NewGzipStreamWriter(&actBuffer)
+		actGzipWriter.Close()
+		actGzipWriter.Close()
+
+		if diff := cmp.Diff(expBuffer.Bytes(), actBuffer.Bytes()); diff != "" {
+			t.Fatalf("TestClose() double-close mismatch (-want +got):\n%s", diff)
+		}
+	})
+}
+
+func TestFlush(t *testing.T) {
+	t.Parallel()
+
+	t.Run("flushing writer is same as stdlib", func(t *testing.T) {
+		t.Parallel()
+
+		expBuffer := bytes.Buffer{}
+		actBuffer := bytes.Buffer{}
+
+		expGzipWriter, ok := testGzipWriterPool.Get().(*gzip.Writer)
+		if !ok {
+			t.Fatal("Could not get *gzip.Writer instance from the pool.")
+		}
+		defer expGzipWriter.Close()
+		defer testGzipWriterPool.Put(expGzipWriter)
+		expGzipWriter.Reset(&expBuffer)
+		expGzipWriter.Flush()
+
+		actGzipWriter := gzipstreamwriter.NewGzipStreamWriter(&actBuffer)
+		actGzipWriter.Flush()
+
+		if diff := cmp.Diff(expBuffer.Bytes(), actBuffer.Bytes()); diff != "" {
+			t.Fatalf("TestFlush() single-flush mismatch (-want +got):\n%s", diff)
+		}
+
+		// Close writers and ensure the trailers match.
+		expGzipWriter.Close()
+		actGzipWriter.Close()
+
+		if diff := cmp.Diff(expBuffer.Bytes(), actBuffer.Bytes()); diff != "" {
+			t.Fatalf("TestFlush() single-flush mismatch (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("double-flush is same as stdlib", func(t *testing.T) {
+		t.Parallel()
+
+		expBuffer := bytes.Buffer{}
+		actBuffer := bytes.Buffer{}
+
+		expGzipWriter, ok := testGzipWriterPool.Get().(*gzip.Writer)
+		if !ok {
+			t.Fatal("Could not get *gzip.Writer instance from the pool.")
+		}
+		defer expGzipWriter.Close()
+		defer testGzipWriterPool.Put(expGzipWriter)
+		expGzipWriter.Reset(&expBuffer)
+		expGzipWriter.Flush()
+		expGzipWriter.Flush()
+
+		actGzipWriter := gzipstreamwriter.NewGzipStreamWriter(&actBuffer)
+		actGzipWriter.Flush()
+		actGzipWriter.Flush()
+
+		if diff := cmp.Diff(expBuffer.Bytes(), actBuffer.Bytes()); diff != "" {
+			t.Fatalf("TestFlush() double-flush mismatch (-want +got):\n%s", diff)
+		}
+
+		// Close writers and ensure the trailers match.
+		expGzipWriter.Close()
+		actGzipWriter.Close()
+
+		if diff := cmp.Diff(expBuffer.Bytes(), actBuffer.Bytes()); diff != "" {
+			t.Fatalf("TestFlush() double-flush mismatch (-want +got):\n%s", diff)
+		}
+	})
 }
 
 func TestWrite(t *testing.T) {
