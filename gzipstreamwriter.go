@@ -36,9 +36,10 @@ const (
 )
 
 var (
-	ErrBlob                = errors.New("gzip: invalid gzip blob")
-	ErrHdrNonLatin1        = errors.New("gzip: non-Latin-1 header string")
-	ErrHdrExtaDataTooLarge = errors.New("gzip: extra data is too large")
+	ErrBlob                    = errors.New("gzip: invalid gzip blob")
+	ErrHdrNonLatin1            = errors.New("gzip: non-Latin-1 header string")
+	ErrHdrExtaDataTooLarge     = errors.New("gzip: extra data is too large")
+	ErrInvalidCompressionLevel = errors.New("gzip: invalid compression level")
 )
 
 type CompressedBlobWriter interface {
@@ -130,7 +131,7 @@ func NewGzipStreamWriter(w io.Writer) *GzipStreamWriter {
 
 func NewGzipStreamWriterLevel(w io.Writer, level int) (*GzipStreamWriter, error) {
 	if level < HuffmanOnly || level > BestCompression {
-		return nil, fmt.Errorf("gzip: invalid compression level: %d", level)
+		return nil, fmt.Errorf("%w: %d", ErrInvalidCompressionLevel, level)
 	}
 	z := new(GzipStreamWriter)
 	z.init(w, level)
@@ -304,7 +305,7 @@ func (z *GzipStreamWriter) writeHeaderString(s string) error {
 	if err != nil {
 		return fmt.Errorf("gzip: failed to write null terminator for header string: %w", err)
 	}
-	return err
+	return nil
 }
 
 // Writes the byte slice to the Gzip output stream.
