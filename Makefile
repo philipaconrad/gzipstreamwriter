@@ -79,10 +79,10 @@ fuzz:
 .PHONY: check-fuzz
 check-fuzz: fuzz
 
-.PHONY: check-yaml-tests
-check-yaml-tests:
+.PHONY: check-yaml
+check-yaml:
 ifeq ($(DOCKER_RUNNING), 1)
-	docker run --rm -v $(shell pwd):/data:ro,Z -w /data pipelinecomponents/yamllint:${YAML_LINT_VERSION} yamllint -f $(YAML_LINT_FORMAT) test/cases/testdata
+	docker run --rm -v $(shell pwd):/data:ro,Z -w /data pipelinecomponents/yamllint:${YAML_LINT_VERSION} yamllint -f $(YAML_LINT_FORMAT) .
 else
 	@echo "Docker not installed or running. Skipping yamllint run."
 endif

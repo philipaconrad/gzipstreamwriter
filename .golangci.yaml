@@ -44,22 +44,22 @@ linters:
     - errname
     - errorlint
     - exhaustive
-    #- exhaustruct # Too many false positives.
+    # - exhaustruct # Too many false positives.
     - fatcontext
     - forbidigo
     - forcetypeassert
     - gci
     - ginkgolinter
     - gocheckcompilerdirectives
-    #- gochecknoglobals
+    # - gochecknoglobals
     - gochecknoinits
     - gochecksumtype
     - gocognit
     - goconst
     - gocritic
     - gocyclo
-    #- godot # This is just silly.
-    #- godox # Fires too often on things that will eventually be fixed.
+    # - godot # This is just silly.
+    # - godox # Fires too often on things that will eventually be fixed.
     - gofmt
     - gofumpt
     - goheader
@@ -67,7 +67,7 @@ linters:
     - gomoddirectives
     - gomodguard
     - goprintffuncname
-    #- gosec # Too many false positives, where truncation is desired.
+    # - gosec # Too many false positives, where truncation is desired.
     - gosimple
     - gosmopolitan
     - govet
@@ -89,7 +89,7 @@ linters:
     - nestif
     - nilerr
     - nilnil
-    #- nlreturn
+    # - nlreturn
     - noctx
     - nolintlint
     - nonamedreturns
