@@ -1,9 +1,11 @@
 ---
+version: "2"
+
 run:
   timeout: 5m
 
 linters:
-  disable-all: true
+  default: none
   # enable:
   #   - mirror
   #   - errcheck
@@ -33,7 +35,7 @@ linters:
     - copyloopvar
     # - cyclop # Fires on things where we need the cyclomatic complexity.
     - decorder
-    - depguard
+    # - depguard # Fires on tests where we import our own package.
     - dogsled
     - dupl
     - dupword
@@ -48,7 +50,6 @@ linters:
     - fatcontext
     - forbidigo
     - forcetypeassert
-    - gci
     - ginkgolinter
     - gocheckcompilerdirectives
     # - gochecknoglobals
@@ -60,15 +61,11 @@ linters:
     - gocyclo
     # - godot # This is just silly.
     # - godox # Fires too often on things that will eventually be fixed.
-    - gofmt
-    - gofumpt
     - goheader
-    - goimports
     - gomoddirectives
     - gomodguard
     - goprintffuncname
     # - gosec # Too many false positives, where truncation is desired.
-    - gosimple
     - gosmopolitan
     - govet
     - grouper
@@ -107,10 +104,8 @@ linters:
     - spancheck
     - sqlclosecheck
     - staticcheck
-    - stylecheck
     - tagalign
     - tagliatelle
-    - tenv
     - testableexamples
     - testifylint
     - testpackage
@@ -126,14 +121,14 @@ linters:
     - zerologlint
     # - gosec # too many false positives
 
-linters-settings:
-  lll:
-    line-length: 200
-  misspell:
-    locale: US
+  settings:
+    lll:
+      line-length: 200
+    misspell:
+      locale: US
 
-issues:
-  exclude-rules:
-    - path: '(.+)_test\.go'
-      linters:
-        - wrapcheck
+  exclusions:
+    rules:
+      - path: '(.+)_test\.go'
+        linters:
+          - wrapcheck
