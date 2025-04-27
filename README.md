@@ -33,6 +33,7 @@ This gives us a powerful abstraction that "does the right thing" behind the scen
 
 ## Go Version Support
 
-I'm supporting the latest Go major version - 2, which seems to be the policy several other large projects are following.
-As this library was originally built for use in one of those bigger projects, I've adopted an appropriate support policy to ensure it's compatible.
+I'm currently supporting the latest Go major version.
+Previously, I'd aimed to support the current major version - 2, but there's a world of performance and features availble on Go 1.24+, and I'd like to have access to those things.
+The larger open source project that this library was originally developed for has caught up to at least Go 1.23+, so this library should be usable for them soon.
 

@@ -2,6 +2,9 @@
 // Use of this source code is governed by an Apache2
 // license that can be found in the LICENSE file.
 
+// Package gzipstreamwriter provides a drop-in replacement for the stdlib
+// gzip.Writer, as well as the ability to write multiple compressed gzip blobs
+// to the same output stream, as if the were all written in one Write call.
 package gzipstreamwriter
 
 import (
@@ -27,6 +30,8 @@ const (
 	flagComment = 1 << 4
 )
 
+// These constants are copied from the flate package, so that code that imports
+// "philipaconrad/gzipstreamwriter" does not also have to import "compress/flate".
 const (
 	NoCompression      = flate.NoCompression
 	BestSpeed          = flate.BestSpeed
@@ -35,6 +40,7 @@ const (
 	HuffmanOnly        = flate.HuffmanOnly
 )
 
+// The error types for the package.
 var (
 	ErrBlob                    = errors.New("gzip: invalid gzip blob")
 	ErrHdrNonLatin1            = errors.New("gzip: non-Latin-1 header string")
@@ -42,6 +48,7 @@ var (
 	ErrInvalidCompressionLevel = errors.New("gzip: invalid compression level")
 )
 
+// CompressedBlobWriter is the interface for writing pre-compressed gzip blobs.
 type CompressedBlobWriter interface {
 	WriteCompressed(p []byte) (n int, err error)
 }
@@ -109,10 +116,7 @@ type CompressedBlobWriter interface {
 // func (g *GzipBlobStream) Close() error {
 // }
 
-// The stateFlags bitfield tracks
-// 0: Have we written the Gzip header yet?
-// 1: Has the stream been closed yet?
-// 2: Are we writing into the DEFLATE stream currently? (Negated when we write compressed blobs.)
+// GzipStreamWriter is a GZIP writer that can write multiple compressed gzip blobs to the same output stream.
 type GzipStreamWriter struct {
 	gzip.Header // written at first call to Write, Flush, or Close
 	w           io.Writer
@@ -121,14 +125,21 @@ type GzipStreamWriter struct {
 	err         error
 	digest      uint32
 	size        uint32
-	stateFlags  uint32 // 0x1: wroteHeader, 0x2: closed, 0x4: activeDeflateStream
+
+	// The stateFlags bitfield tracks
+	// 0: Have we written the Gzip header yet?
+	// 1: Has the stream been closed yet?
+	// 2: Are we writing into the DEFLATE stream currently? (Negated when we write compressed blobs.)
+	stateFlags uint32 // 0x1: wroteHeader, 0x2: closed, 0x4: activeDeflateStream
 }
 
+// NewGzipStreamWriter creates a new GzipStreamWriter with the default compression level.
 func NewGzipStreamWriter(w io.Writer) *GzipStreamWriter {
 	z, _ := NewGzipStreamWriterLevel(w, DefaultCompression)
 	return z
 }
 
+// NewGzipStreamWriterLevel creates a new GzipStreamWriter with the specified compression level.
 func NewGzipStreamWriterLevel(w io.Writer, level int) (*GzipStreamWriter, error) {
 	if level < HuffmanOnly || level > BestCompression {
 		return nil, fmt.Errorf("%w: %d", ErrInvalidCompressionLevel, level)
@@ -308,7 +319,7 @@ func (z *GzipStreamWriter) writeHeaderString(s string) error {
 	return nil
 }
 
-// Writes the byte slice to the Gzip output stream.
+// Write writes the byte slice to the Gzip output stream.
 // This will trigger a Flush call on the underlying compressor, emitting a sync marker at a minimum.
 func (z *GzipStreamWriter) Write(p []byte) (int, error) {
 	if z.err != nil {
@@ -334,7 +345,7 @@ func (z *GzipStreamWriter) Write(p []byte) (int, error) {
 	return n, z.err
 }
 
-// Writes a compressed gzip byte blob through to the underlying writer.
+// WriteCompressed writes a compressed gzip byte blob through to the underlying writer.
 func (z *GzipStreamWriter) WriteCompressed(p []byte) (int, error) {
 	if z.err != nil {
 		return 0, z.err
@@ -525,6 +536,7 @@ func (z *GzipStreamWriter) Flush() error {
 	return z.err
 }
 
+// Reset resets the GzipStreamWriter's compressor and other internal state, and changes the output destination to the provided io.Writer.
 func (z *GzipStreamWriter) Reset(w io.Writer) {
 	z.init(w, z.level)
 	z.setClosed(false)

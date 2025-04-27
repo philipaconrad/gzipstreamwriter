@@ -14,14 +14,14 @@ import (
 )
 
 var testGzipWriterPool = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		writer := gzip.NewWriter(io.Discard)
 		return writer
 	},
 }
 
 var testGzipReaderPool = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		reader := new(gzip.Reader)
 		return reader
 	},
@@ -40,10 +40,10 @@ func TestClose(t *testing.T) {
 		if !ok {
 			t.Fatal("Could not get *gzip.Writer instance from the pool.")
 		}
-		defer expGzipWriter.Close()
+		defer expGzipWriter.Close() //nolint:errcheck
 		defer testGzipWriterPool.Put(expGzipWriter)
 		expGzipWriter.Reset(&expBuffer)
-		expGzipWriter.Close()
+		_ = expGzipWriter.Close()
 
 		actGzipWriter := gzipstreamwriter.NewGzipStreamWriter(&actBuffer)
 		if err := actGzipWriter.Close(); err != nil {
@@ -65,15 +65,15 @@ func TestClose(t *testing.T) {
 		if !ok {
 			t.Fatal("Could not get *gzip.Writer instance from the pool.")
 		}
-		defer expGzipWriter.Close()
+		defer expGzipWriter.Close() //nolint:errcheck
 		defer testGzipWriterPool.Put(expGzipWriter)
 		expGzipWriter.Reset(&expBuffer)
-		expGzipWriter.Close()
-		expGzipWriter.Close()
+		_ = expGzipWriter.Close()
+		_ = expGzipWriter.Close()
 
 		actGzipWriter := gzipstreamwriter.NewGzipStreamWriter(&actBuffer)
-		actGzipWriter.Close()
-		actGzipWriter.Close()
+		_ = actGzipWriter.Close()
+		_ = actGzipWriter.Close()
 
 		if diff := cmp.Diff(expBuffer.Bytes(), actBuffer.Bytes()); diff != "" {
 			t.Fatalf("TestClose() double-close mismatch (-want +got):\n%s", diff)
@@ -94,21 +94,21 @@ func TestFlush(t *testing.T) {
 		if !ok {
 			t.Fatal("Could not get *gzip.Writer instance from the pool.")
 		}
-		defer expGzipWriter.Close()
+		defer expGzipWriter.Close() //nolint:errcheck
 		defer testGzipWriterPool.Put(expGzipWriter)
 		expGzipWriter.Reset(&expBuffer)
-		expGzipWriter.Flush()
+		_ = expGzipWriter.Flush()
 
 		actGzipWriter := gzipstreamwriter.NewGzipStreamWriter(&actBuffer)
-		actGzipWriter.Flush()
+		_ = actGzipWriter.Flush()
 
 		if diff := cmp.Diff(expBuffer.Bytes(), actBuffer.Bytes()); diff != "" {
 			t.Fatalf("TestFlush() single-flush mismatch (-want +got):\n%s", diff)
 		}
 
 		// Close writers and ensure the trailers match.
-		expGzipWriter.Close()
-		actGzipWriter.Close()
+		_ = expGzipWriter.Close()
+		_ = actGzipWriter.Close()
 
 		if diff := cmp.Diff(expBuffer.Bytes(), actBuffer.Bytes()); diff != "" {
 			t.Fatalf("TestFlush() single-flush mismatch (-want +got):\n%s", diff)
@@ -125,23 +125,23 @@ func TestFlush(t *testing.T) {
 		if !ok {
 			t.Fatal("Could not get *gzip.Writer instance from the pool.")
 		}
-		defer expGzipWriter.Close()
+		defer expGzipWriter.Close() //nolint:errcheck
 		defer testGzipWriterPool.Put(expGzipWriter)
 		expGzipWriter.Reset(&expBuffer)
-		expGzipWriter.Flush()
-		expGzipWriter.Flush()
+		_ = expGzipWriter.Flush()
+		_ = expGzipWriter.Flush()
 
 		actGzipWriter := gzipstreamwriter.NewGzipStreamWriter(&actBuffer)
-		actGzipWriter.Flush()
-		actGzipWriter.Flush()
+		_ = actGzipWriter.Flush()
+		_ = actGzipWriter.Flush()
 
 		if diff := cmp.Diff(expBuffer.Bytes(), actBuffer.Bytes()); diff != "" {
 			t.Fatalf("TestFlush() double-flush mismatch (-want +got):\n%s", diff)
 		}
 
 		// Close writers and ensure the trailers match.
-		expGzipWriter.Close()
-		actGzipWriter.Close()
+		_ = expGzipWriter.Close()
+		_ = actGzipWriter.Close()
 
 		if diff := cmp.Diff(expBuffer.Bytes(), actBuffer.Bytes()); diff != "" {
 			t.Fatalf("TestFlush() double-flush mismatch (-want +got):\n%s", diff)
@@ -171,7 +171,6 @@ func TestWrite(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc // loop var copy. Not needed in Go 1.22+
 		t.Run(tc.note, func(t *testing.T) {
 			t.Parallel()
 
@@ -182,7 +181,7 @@ func TestWrite(t *testing.T) {
 			if !ok {
 				t.Fatal("Could not get *gzip.Writer instance from the pool.")
 			}
-			defer expGzipWriter.Close()
+			defer expGzipWriter.Close() //nolint:errcheck
 			defer testGzipWriterPool.Put(expGzipWriter)
 			expGzipWriter.Reset(&expBuffer)
 			actGzipWriter := gzipstreamwriter.NewGzipStreamWriter(&actBuffer)
@@ -203,7 +202,7 @@ func TestWrite(t *testing.T) {
 			if !ok {
 				t.Fatal("Could not get *gzip.Reader instance from the pool.")
 			}
-			defer gzReader.Close()
+			defer gzReader.Close() //nolint:errcheck
 			defer testGzipReaderPool.Put(gzReader)
 
 			var expResult []byte
